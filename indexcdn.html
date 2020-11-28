@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="utf-8" />
+        <meta name="viewport" content="width=device-width">
+        <title>Recieverr</title>
+    </head>
+    <body>
+        <div id="remotevideo"></div>
+        <div id="status" class="status"></div>
+        <div id="receiver-id" style="font-weight: bold;" title="Copy this ">ID:</div>
+        <div>
+            <input type="text" id="sendMessageBox" placeholder="Enter a message..." autofocus="true" />
+            <button type="button" id="sendButton">Send</button>
+        </div>
+        <div class="message" id="message"></div>
+       <!-- <table class="display">
+            <tr>
+                <td>
+                    <video class="primary-video" autoplay muted id="local-video"></video>
+                </td>
+                <td>
+                    <video class="secondary-video" autoplay id="remote-video"></video>
+                </td>
+            </tr>
+        </table>-->
+        <!-- <script src="socket.io.js"></script>
+        <script src="simplepeer.min.js"></script> -->
+        <script src="https://cdn.jsdelivr.net/npm/socket.io-client@2/dist/socket.io.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/simple-peer@9.9.3/simplepeer.min.js"></script>
+        <script type="text/javascript">
+            var roomID = "meest_webrtc"
+            var divele ;
+            var peers ;
+            var mystream;
+            var socket;
+
+            window.onload = function() {
+            console.log("test webview")
+                navigator.mediaDevices.getUserMedia({
+                    video: {
+                        height: window.innerHeight / 3,
+                        width: window.innerWidth / 3
+                    }, 
+                    audio: true 
+                }).then(stream => {
+                    mystream=stream;
+                    addVideoElement(mystream);
+
+                    // socket = io.connect("http://localhost:3004/");
+                    // socket = io.connect("https://socket.dbmdemo.com");
+                    // socket = io.connect("http://3.7.141.9:3004/");
+                    socket = io.connect("http://192.168.29.48:8000/");
+
+                    socket.on("connected", payload => {
+                        console.log("connected server : ",payload)
+                        console.log("socket webview")
+                        // alert(payload.msg)
+                    });
+                    socket.on("all users", users => {
+                        console.log("existing users: ",users)
+                        peers = [];
+                        users.forEach(userID => {
+                            const peer = createPeer(userID, socket.id, mystream);
+                            peers.push({
+                                peerID: userID,
+                                peer,
+                            })
+                        })
+                        bindPeers();
+                    })
+                    socket.on("user joined", payload => {
+                        console.log("new user in : ",payload)
+                        const peer = addPeer(payload.signal, payload.callerID, mystream);
+                        peers.push({
+                            peerID: payload.callerID,
+                            peer,
+                        })
+                        bindPeers();
+                    });
+                    socket.on("receiving returned signal", payload => {
+                        console.log("Recieved old user answer from server : ",payload)
+                        const item = peers.find(p => p.peerID === payload.id);
+                        item.peer.signal(payload.signal);
+                    });
+
+
+                    socket.emit("join room", roomID);
+                })
+            };
+            function createPeer(userToSignal, callerID, stream) {
+                const peer = new SimplePeer({
+                    initiator: true,
+                    trickle: false,
+                    stream,
+                });
+                console.log("Connecting existing peer")
+                peer.on("signal", signal => {
+                    console.log("sending Self Signal to server")
+                    socket.emit("sending signal", { userToSignal, callerID, signal })
+                })
+                return peer;
+            }
+            function addPeer(incomingSignal, callerID, stream) {
+                const peer = new SimplePeer({
+                    initiator: false,
+                    trickle: false,
+                    stream,
+                })
+                peer.on("signal", signal => {
+                    console.log("sending Answer to new user")
+                    socket.emit("returning signal", { signal, callerID }) 
+                })
+                console.log("sending offer signal new user: ",incomingSignal)
+                peer.signal(incomingSignal);
+                return peer;
+            }
+            function addVideoElement(stream){
+                var vdo = createElementFromHTML("<video playsInline autoPlay />")
+                vdo.srcObject = stream
+                divele.appendChild(vdo);
+            }
+            function createElementFromHTML(htmlString) {
+                if(!divele)divele = document.getElementById('remotevideo');;
+                var div = document.createElement('div');
+                div.innerHTML = htmlString.trim();
+                return div.firstChild; 
+            }
+            function bindPeers(){
+                peers.map((peer, index) => {
+                    peer.peer.on(
+                        "stream",
+                        (stream) => {
+                            addVideoElement(stream)
+                            console.log("got stream of remote ")
+                        }
+                    )
+                })
+            }
+        </script>
+    </body>
+</html>
